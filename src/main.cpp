@@ -11,6 +11,7 @@
 #include <string>
 
 #include "csv.h"
+#include "delete.h"
 #include "insert.h"
 #include "select.h"
 #include "strutil.h"
@@ -61,6 +62,11 @@ int main(int argc, char** argv) {
 			const std::size_t affected = csvdb::executeUpdate(csvdb::parseUpdate(query), table);
 			csvdb::saveCsvFile(path, table);
 			std::cout << affected << " row(s) updated.\n";
+		} else if (keyword == "DELETE") {
+			csvdb::Table table = csvdb::loadCsvFile(path);
+			const std::size_t affected = csvdb::executeDelete(csvdb::parseDelete(query), table);
+			csvdb::saveCsvFile(path, table);
+			std::cout << affected << " row(s) deleted.\n";
 		} else {
 			std::cerr << "Error: unsupported command: " << keyword << '\n';
 			return 1;
