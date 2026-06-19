@@ -1,0 +1,33 @@
+name: C++ Build and Test
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build and Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++
+
+      - name: Build test suite
+        run: |
+          g++ -std=c++20 -Wall -Wextra -o csv_tests \
+            tests/test_csv.cpp \
+            src/csv.cpp
+          echo "✓ Test suite compiled"
+
+      - name: Run tests
+        run: |
+          ./csv_tests
+          echo "✓ Tests completed"
