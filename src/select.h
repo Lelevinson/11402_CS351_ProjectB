@@ -7,10 +7,18 @@
 
 namespace csvdb {
 
-// A parsed "SELECT ... FROM ..." statement.
+// An optional "WHERE column = value" equality filter.
+struct WhereClause {
+	bool present = false;
+	std::string column;
+	std::string value;
+};
+
+// A parsed "SELECT ... FROM ... [WHERE ...]" statement.
 struct SelectQuery {
 	std::vector<std::string> columns;  // requested columns in order; {"*"} means all
 	std::string table;                 // table name from the FROM clause
+	WhereClause where;                 // optional equality filter
 };
 
 // Parse a SELECT statement of the form:  SELECT col1, col2 FROM table
