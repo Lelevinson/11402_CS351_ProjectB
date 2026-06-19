@@ -45,6 +45,19 @@ jobs:
           ./select_tests
           echo "✓ SELECT tests completed"
 
+      - name: Build WHERE test suite
+        run: |
+          g++ -std=c++20 -Wall -Wextra -o where_tests \
+            tests/test_where.cpp \
+            src/select.cpp \
+            src/csv.cpp
+          echo "✓ WHERE test suite compiled"
+
+      - name: Run WHERE tests
+        run: |
+          ./where_tests
+          echo "✓ WHERE tests completed"
+
       - name: Build query demo
         run: |
           g++ -std=c++20 -Wall -Wextra -o csv_query \
