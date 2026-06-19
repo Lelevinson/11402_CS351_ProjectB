@@ -91,6 +91,17 @@ void test_unterminated_quote_throws() {
 	             "malformed: unterminated quote throws");
 }
 
+void test_write_roundtrip() {
+	// Includes fields that must be quoted on write: an embedded comma and an
+	// embedded (escaped) quote.
+	const std::string text = "name,note\nAlice,\"hello, world\"\nBob,\"she said \"\"hi\"\"\"\n";
+	const auto original = csvdb::parseCsv(text);
+	const std::string serialized = csvdb::writeCsv(original);
+	const auto reparsed = csvdb::parseCsv(serialized);
+	check(reparsed.headers == original.headers, "write: headers round-trip");
+	check(reparsed.rows == original.rows, "write: rows round-trip (quoting preserved)");
+}
+
 }  // namespace
 
 int main() {
@@ -103,6 +114,7 @@ int main() {
 	test_column_helpers();
 	test_malformed_row_throws();
 	test_unterminated_quote_throws();
+	test_write_roundtrip();
 
 	std::cout << "\nChecks run: " << g_checks << " | Passed: " << (g_checks - g_failures)
 	          << " | Failed: " << g_failures << '\n';

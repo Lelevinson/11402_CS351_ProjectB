@@ -1,39 +1,12 @@
 #include "select.h"
 
-#include <algorithm>
-#include <cctype>
-#include <sstream>
 #include <stdexcept>
 #include <utility>
 
+#include "strutil.h"
+#include "where.h"
+
 namespace csvdb {
-
-namespace {
-
-std::string trim(const std::string& s) {
-	std::size_t begin = 0;
-	std::size_t end = s.size();
-	while (begin < end && std::isspace(static_cast<unsigned char>(s[begin]))) {
-		++begin;
-	}
-	while (end > begin && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
-		--end;
-	}
-	return s.substr(begin, end - begin);
-}
-
-std::string toUpper(const std::string& s) {
-	std::string out = s;
-	std::transform(out.begin(), out.end(), out.begin(),
-	               [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-	return out;
-}
-
-bool isSpaceAt(const std::string& s, std::size_t i) {
-	return i < s.size() && std::isspace(static_cast<unsigned char>(s[i]));
-}
-
-}  // namespace
 
 SelectQuery parseSelect(const std::string& query) {
 	std::string q = trim(query);
@@ -68,26 +41,13 @@ SelectQuery parseSelect(const std::string& query) {
 	const std::string colsPart = trim(q.substr(kSelect.size(), fromPos - kSelect.size()));
 	const std::string afterFrom = q.substr(fromPos + kFrom.size());
 
-	// Split the part after FROM into the table name and an optional WHERE clause.
-	const std::string upperAfter = toUpper(afterFrom);
-	const std::string kWhere = "WHERE";
-	std::size_t wherePos = std::string::npos;
-	for (std::size_t i = 0; i + kWhere.size() <= upperAfter.size(); ++i) {
-		if (upperAfter.compare(i, kWhere.size(), kWhere) == 0 &&
-		    (i == 0 || isSpaceAt(afterFrom, i - 1)) &&
-		    (i + kWhere.size() == afterFrom.size() || isSpaceAt(afterFrom, i + kWhere.size()))) {
-			wherePos = i;
-			break;
-		}
-	}
-
-	std::string tablePart;
-	std::string wherePart;
-	if (wherePos != std::string::npos) {
-		tablePart = trim(afterFrom.substr(0, wherePos));
-		wherePart = trim(afterFrom.substr(wherePos + kWhere.size()));
-	} else {
-		tablePart = trim(afterFrom);
+	// The part after FROM is "table [WHERE ...]".
+	std::string tablePart = trim(afterFrom);
+	std::string beforeWhere;
+	std::string afterWhere;
+	const bool hasWhere = splitWhere(afterFrom, beforeWhere, afterWhere);
+	if (hasWhere) {
+		tablePart = trim(beforeWhere);
 	}
 
 	if (colsPart.empty()) {
@@ -102,29 +62,8 @@ SelectQuery parseSelect(const std::string& query) {
 
 	SelectQuery result;
 	result.table = tablePart;
-
-	// Parse the optional WHERE clause: column = value.
-	if (wherePos != std::string::npos) {
-		if (wherePart.empty()) {
-			throw std::runtime_error("SELECT parse error: empty WHERE clause");
-		}
-		const std::size_t eq = wherePart.find('=');
-		if (eq == std::string::npos) {
-			throw std::runtime_error("SELECT parse error: WHERE requires 'column = value'");
-		}
-		const std::string column = trim(wherePart.substr(0, eq));
-		std::string value = trim(wherePart.substr(eq + 1));
-		if (column.empty()) {
-			throw std::runtime_error("SELECT parse error: WHERE is missing a column name");
-		}
-		// Strip a matching pair of surrounding quotes from the value.
-		if (value.size() >= 2 && (value.front() == '"' || value.front() == '\'') &&
-		    value.back() == value.front()) {
-			value = value.substr(1, value.size() - 2);
-		}
-		result.where.present = true;
-		result.where.column = column;
-		result.where.value = value;
+	if (hasWhere) {
+		result.where = parseWhereExpr(afterWhere);
 	}
 
 	if (colsPart == "*") {
@@ -132,8 +71,8 @@ SelectQuery parseSelect(const std::string& query) {
 		return result;
 	}
 
-	// Split on commas manually so an empty token (including a trailing comma,
-	// e.g. "name,") is reported as an error rather than silently dropped.
+	// Split the column list on commas; an empty token (including a trailing
+	// comma, e.g. "name,") is reported as an error rather than silently dropped.
 	std::size_t start = 0;
 	while (true) {
 		const std::size_t comma = colsPart.find(',', start);
@@ -154,48 +93,35 @@ SelectQuery parseSelect(const std::string& query) {
 }
 
 Table executeSelect(const SelectQuery& query, const Table& table) {
-	// Apply the optional WHERE filter first, collecting the rows to keep.
-	std::vector<const std::vector<std::string>*> kept;
-	if (query.where.present) {
-		const std::size_t whereIndex =
-			table.columnIndex(query.where.column);  // throws std::out_of_range if missing
-		for (const auto& row : table.rows) {
-			if (row[whereIndex] == query.where.value) {
-				kept.push_back(&row);
-			}
-		}
-	} else {
-		for (const auto& row : table.rows) {
-			kept.push_back(&row);
-		}
-	}
+	// Rows to keep (WHERE filter applied; validates the WHERE column exists).
+	const std::vector<std::size_t> rowIndices = matchingRows(table, query.where);
 
 	Table result;
 
-	// SELECT * keeps every column (still honouring the WHERE filter above).
+	// SELECT * keeps every column (still honouring the WHERE filter).
 	if (query.columns.size() == 1 && query.columns[0] == "*") {
 		result.headers = table.headers;
-		result.rows.reserve(kept.size());
-		for (const auto* row : kept) {
-			result.rows.push_back(*row);
+		result.rows.reserve(rowIndices.size());
+		for (const std::size_t i : rowIndices) {
+			result.rows.push_back(table.rows[i]);
 		}
 		return result;
 	}
 
 	// Otherwise project the requested columns, in order.
-	std::vector<std::size_t> indices;
-	indices.reserve(query.columns.size());
+	std::vector<std::size_t> columnIndices;
+	columnIndices.reserve(query.columns.size());
 	for (const auto& column : query.columns) {
-		indices.push_back(table.columnIndex(column));  // throws std::out_of_range if missing
+		columnIndices.push_back(table.columnIndex(column));  // throws if missing
 	}
 
 	result.headers = query.columns;
-	result.rows.reserve(kept.size());
-	for (const auto* row : kept) {
+	result.rows.reserve(rowIndices.size());
+	for (const std::size_t i : rowIndices) {
 		std::vector<std::string> projected;
-		projected.reserve(indices.size());
-		for (const std::size_t index : indices) {
-			projected.push_back((*row)[index]);
+		projected.reserve(columnIndices.size());
+		for (const std::size_t columnIndex : columnIndices) {
+			projected.push_back(table.rows[i][columnIndex]);
 		}
 		result.rows.push_back(std::move(projected));
 	}

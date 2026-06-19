@@ -4,15 +4,9 @@
 #include <vector>
 
 #include "csv.h"
+#include "where.h"
 
 namespace csvdb {
-
-// An optional "WHERE column = value" equality filter.
-struct WhereClause {
-	bool present = false;
-	std::string column;
-	std::string value;
-};
 
 // A parsed "SELECT ... FROM ... [WHERE ...]" statement.
 struct SelectQuery {

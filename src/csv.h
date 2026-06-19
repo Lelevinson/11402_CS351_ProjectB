@@ -33,4 +33,13 @@ Table parseCsv(const std::string& text);
 // Throws std::runtime_error if the file cannot be opened.
 Table loadCsvFile(const std::string& path);
 
+// Serialize a Table back to CSV text (header row + one line per row). Fields
+// containing a comma, double quote, or newline are quoted, with internal double
+// quotes escaped as "". parseCsv(writeCsv(t)) reproduces t.
+std::string writeCsv(const Table& table);
+
+// Serialize a Table and write it to a file.
+// Throws std::runtime_error if the file cannot be opened for writing.
+void saveCsvFile(const std::string& path, const Table& table);
+
 }  // namespace csvdb
