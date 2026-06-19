@@ -6,6 +6,7 @@
 // SELECT prints to stdout; mutating commands write the file back and report.
 
 #include <cctype>
+#include <cstddef>
 #include <iostream>
 #include <string>
 
@@ -13,6 +14,7 @@
 #include "insert.h"
 #include "select.h"
 #include "strutil.h"
+#include "update.h"
 
 namespace {
 
@@ -54,6 +56,11 @@ int main(int argc, char** argv) {
 			csvdb::executeInsert(csvdb::parseInsert(query), table);
 			csvdb::saveCsvFile(path, table);
 			std::cout << "1 row inserted.\n";
+		} else if (keyword == "UPDATE") {
+			csvdb::Table table = csvdb::loadCsvFile(path);
+			const std::size_t affected = csvdb::executeUpdate(csvdb::parseUpdate(query), table);
+			csvdb::saveCsvFile(path, table);
+			std::cout << affected << " row(s) updated.\n";
 		} else {
 			std::cerr << "Error: unsupported command: " << keyword << '\n';
 			return 1;
