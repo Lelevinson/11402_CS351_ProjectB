@@ -66,7 +66,29 @@ SelectQuery parseSelect(const std::string& query) {
 	}
 
 	const std::string colsPart = trim(q.substr(kSelect.size(), fromPos - kSelect.size()));
-	const std::string tablePart = trim(q.substr(fromPos + kFrom.size()));
+	const std::string afterFrom = q.substr(fromPos + kFrom.size());
+
+	// Split the part after FROM into the table name and an optional WHERE clause.
+	const std::string upperAfter = toUpper(afterFrom);
+	const std::string kWhere = "WHERE";
+	std::size_t wherePos = std::string::npos;
+	for (std::size_t i = 0; i + kWhere.size() <= upperAfter.size(); ++i) {
+		if (upperAfter.compare(i, kWhere.size(), kWhere) == 0 &&
+		    (i == 0 || isSpaceAt(afterFrom, i - 1)) &&
+		    (i + kWhere.size() == afterFrom.size() || isSpaceAt(afterFrom, i + kWhere.size()))) {
+			wherePos = i;
+			break;
+		}
+	}
+
+	std::string tablePart;
+	std::string wherePart;
+	if (wherePos != std::string::npos) {
+		tablePart = trim(afterFrom.substr(0, wherePos));
+		wherePart = trim(afterFrom.substr(wherePos + kWhere.size()));
+	} else {
+		tablePart = trim(afterFrom);
+	}
 
 	if (colsPart.empty()) {
 		throw std::runtime_error("SELECT parse error: no columns specified");
@@ -80,6 +102,30 @@ SelectQuery parseSelect(const std::string& query) {
 
 	SelectQuery result;
 	result.table = tablePart;
+
+	// Parse the optional WHERE clause: column = value.
+	if (wherePos != std::string::npos) {
+		if (wherePart.empty()) {
+			throw std::runtime_error("SELECT parse error: empty WHERE clause");
+		}
+		const std::size_t eq = wherePart.find('=');
+		if (eq == std::string::npos) {
+			throw std::runtime_error("SELECT parse error: WHERE requires 'column = value'");
+		}
+		const std::string column = trim(wherePart.substr(0, eq));
+		std::string value = trim(wherePart.substr(eq + 1));
+		if (column.empty()) {
+			throw std::runtime_error("SELECT parse error: WHERE is missing a column name");
+		}
+		// Strip a matching pair of surrounding quotes from the value.
+		if (value.size() >= 2 && (value.front() == '"' || value.front() == '\'') &&
+		    value.back() == value.front()) {
+			value = value.substr(1, value.size() - 2);
+		}
+		result.where.present = true;
+		result.where.column = column;
+		result.where.value = value;
+	}
 
 	if (colsPart == "*") {
 		result.columns = {"*"};
@@ -108,24 +154,48 @@ SelectQuery parseSelect(const std::string& query) {
 }
 
 Table executeSelect(const SelectQuery& query, const Table& table) {
-	if (query.columns.size() == 1 && query.columns[0] == "*") {
-		return table;
+	// Apply the optional WHERE filter first, collecting the rows to keep.
+	std::vector<const std::vector<std::string>*> kept;
+	if (query.where.present) {
+		const std::size_t whereIndex =
+			table.columnIndex(query.where.column);  // throws std::out_of_range if missing
+		for (const auto& row : table.rows) {
+			if (row[whereIndex] == query.where.value) {
+				kept.push_back(&row);
+			}
+		}
+	} else {
+		for (const auto& row : table.rows) {
+			kept.push_back(&row);
+		}
 	}
 
+	Table result;
+
+	// SELECT * keeps every column (still honouring the WHERE filter above).
+	if (query.columns.size() == 1 && query.columns[0] == "*") {
+		result.headers = table.headers;
+		result.rows.reserve(kept.size());
+		for (const auto* row : kept) {
+			result.rows.push_back(*row);
+		}
+		return result;
+	}
+
+	// Otherwise project the requested columns, in order.
 	std::vector<std::size_t> indices;
 	indices.reserve(query.columns.size());
 	for (const auto& column : query.columns) {
 		indices.push_back(table.columnIndex(column));  // throws std::out_of_range if missing
 	}
 
-	Table result;
 	result.headers = query.columns;
-	result.rows.reserve(table.rows.size());
-	for (const auto& row : table.rows) {
+	result.rows.reserve(kept.size());
+	for (const auto* row : kept) {
 		std::vector<std::string> projected;
 		projected.reserve(indices.size());
 		for (const std::size_t index : indices) {
-			projected.push_back(row[index]);
+			projected.push_back((*row)[index]);
 		}
 		result.rows.push_back(std::move(projected));
 	}

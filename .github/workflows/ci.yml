@@ -56,4 +56,5 @@ jobs:
       - name: Run query demo
         run: |
           ./csv_query data/students.csv "SELECT name, major FROM students"
+          ./csv_query data/students.csv "SELECT name FROM students WHERE major = CS"
           echo "✓ Query demo ran"
