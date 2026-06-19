@@ -31,3 +31,16 @@ jobs:
         run: |
           ./csv_tests
           echo "✓ Tests completed"
+
+      - name: Build query demo
+        run: |
+          g++ -std=c++20 -Wall -Wextra -o csv_query \
+            src/main.cpp \
+            src/select.cpp \
+            src/csv.cpp
+          echo "✓ Query demo compiled"
+
+      - name: Run query demo
+        run: |
+          ./csv_query data/students.csv "SELECT name, major FROM students"
+          echo "✓ Query demo ran"
