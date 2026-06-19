@@ -128,4 +128,53 @@ Table loadCsvFile(const std::string& path) {
 	return parseCsv(buffer.str());
 }
 
+namespace {
+
+// Quote a field only if it contains a comma, double quote, or newline;
+// internal double quotes are escaped by doubling them.
+std::string escapeField(const std::string& field) {
+	if (field.find_first_of(",\"\n\r") == std::string::npos) {
+		return field;
+	}
+	std::string out = "\"";
+	for (const char c : field) {
+		if (c == '"') {
+			out += "\"\"";
+		} else {
+			out += c;
+		}
+	}
+	out += '"';
+	return out;
+}
+
+}  // namespace
+
+std::string writeCsv(const Table& table) {
+	std::string out;
+	const auto appendRow = [&out](const std::vector<std::string>& fields) {
+		for (std::size_t i = 0; i < fields.size(); ++i) {
+			if (i != 0) {
+				out += ',';
+			}
+			out += escapeField(fields[i]);
+		}
+		out += '\n';
+	};
+
+	appendRow(table.headers);
+	for (const auto& row : table.rows) {
+		appendRow(row);
+	}
+	return out;
+}
+
+void saveCsvFile(const std::string& path, const Table& table) {
+	std::ofstream out(path, std::ios::binary);
+	if (!out) {
+		throw std::runtime_error("CSV save error: cannot open file for writing: " + path);
+	}
+	out << writeCsv(table);
+}
+
 }  // namespace csvdb
