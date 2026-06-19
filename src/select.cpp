@@ -86,14 +86,23 @@ SelectQuery parseSelect(const std::string& query) {
 		return result;
 	}
 
-	std::stringstream ss(colsPart);
-	std::string item;
-	while (std::getline(ss, item, ',')) {
-		const std::string name = trim(item);
+	// Split on commas manually so an empty token (including a trailing comma,
+	// e.g. "name,") is reported as an error rather than silently dropped.
+	std::size_t start = 0;
+	while (true) {
+		const std::size_t comma = colsPart.find(',', start);
+		const std::string token =
+			(comma == std::string::npos) ? colsPart.substr(start)
+			                             : colsPart.substr(start, comma - start);
+		const std::string name = trim(token);
 		if (name.empty()) {
 			throw std::runtime_error("SELECT parse error: empty column name in list");
 		}
 		result.columns.push_back(name);
+		if (comma == std::string::npos) {
+			break;
+		}
+		start = comma + 1;
 	}
 	return result;
 }
