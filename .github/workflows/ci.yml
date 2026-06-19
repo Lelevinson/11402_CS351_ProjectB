@@ -60,12 +60,26 @@ jobs:
           ./where_tests
           echo "✓ WHERE tests completed"
 
+      - name: Build INSERT test suite
+        run: |
+          g++ -std=c++20 -Wall -Wextra -o insert_tests \
+            tests/test_insert.cpp \
+            src/insert.cpp \
+            src/csv.cpp
+          echo "✓ INSERT test suite compiled"
+
+      - name: Run INSERT tests
+        run: |
+          ./insert_tests
+          echo "✓ INSERT tests completed"
+
       - name: Build query demo
         run: |
           g++ -std=c++20 -Wall -Wextra -o csv_query \
             src/main.cpp \
             src/select.cpp \
             src/where.cpp \
+            src/insert.cpp \
             src/csv.cpp
           echo "✓ Query demo compiled"
 
@@ -73,4 +87,7 @@ jobs:
         run: |
           ./csv_query data/students.csv "SELECT name, major FROM students"
           ./csv_query data/students.csv "SELECT name FROM students WHERE major = CS"
+          cp data/students.csv /tmp/demo.csv
+          ./csv_query /tmp/demo.csv "INSERT INTO students VALUES (Dave, 23, Math)"
+          ./csv_query /tmp/demo.csv "SELECT name FROM students WHERE major = Math"
           echo "✓ Query demo ran"
