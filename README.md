@@ -1,30 +1,99 @@
-# Project B: CSV Mini Database and Query Engine
+# CSV Mini Database — Project B
 
-## Overview
+[![CI](https://github.com/Lelevinson/11402_CS351_ProjectB/actions/workflows/ci.yml/badge.svg)](https://github.com/Lelevinson/11402_CS351_ProjectB/actions/workflows/ci.yml)
 
-Project B involves building a lightweight database system that can read CSV (Comma-Separated Values) files and provide a query engine to search, filter, and manipulate data within those files. Think of it as a simplified version of a spreadsheet application—it allows you to load data from CSV files and ask questions about that data using query commands.
+A lightweight CSV-backed database with a small SQL-like query engine, in C++20. Load a CSV file, then
+read and change it from the command line. Think of it as a simplified spreadsheet you can query.
+Built for CS351, AI-Assisted Software Development.
 
-## Core Objectives
+Part of my CS351 coursework. See the [course front page](https://github.com/Lelevinson/11402_CS351).
 
-- **CSV Data Loading**: Parse and load CSV files into an in-memory data structure
-- **Data Storage**: Store the loaded data in a format that makes it easy to access and manipulate
-- **Query Engine**: Implement a system to perform common database operations like:
-  - Filtering rows based on conditions
-  - Selecting specific columns
-  - Sorting data
-  - Aggregating values (sum, count, average, etc.)
-  - Joining data from multiple sources
+## What it does
 
-## Key Features
+One command-line tool, `csv_query`, runs a single query against a CSV file:
 
-1. **CSV Parser**: Read and validate CSV files, handling edge cases like quoted fields and escaped characters
-2. **Query Language**: Develop a simple query interface (similar to SQL) that allows users to specify what data they want
-3. **Data Retrieval**: Return results in an organized format
-4. **Performance**: Handle reasonably sized datasets efficiently
-5. **Error Handling**: Gracefully manage malformed CSV files or invalid queries
+```
+csv_query <file.csv> "<query>"
+```
 
-## Use Cases
+It supports five commands:
 
-- Analyzing data from exported files without needing a full database server
-- Building a lightweight tool for data analysis and reporting
-- Creating a foundation for understanding how real databases work
+| Command | Example | Effect |
+| --- | --- | --- |
+| `SELECT` | `SELECT name, major FROM students` | print chosen columns (or `*`) |
+| `SELECT ... WHERE` | `SELECT name FROM students WHERE major = CS` | filter rows by an equality test |
+| `INSERT` | `INSERT INTO students VALUES (Dave, 23, Math)` | append a row, save the file |
+| `UPDATE` | `UPDATE students SET major = Physics WHERE name = Dave` | change matching rows, save the file |
+| `DELETE` | `DELETE FROM students WHERE major = EE` | remove matching rows, save the file |
+
+`SELECT` prints to the screen. `INSERT`, `UPDATE`, and `DELETE` write the change back to the CSV file,
+so the data persists. That is what makes it a real little database rather than just a reader.
+
+## Build and run
+
+Requires a C++20 compiler.
+
+```bash
+g++ -std=c++20 -Wall -Wextra -o csv_query \
+  src/main.cpp src/select.cpp src/where.cpp src/insert.cpp src/update.cpp src/delete.cpp src/csv.cpp
+```
+
+A sample file ships in `data/`:
+
+```bash
+$ ./csv_query data/students.csv "SELECT name, major FROM students WHERE major = CS"
+name,major
+Alice,CS
+```
+
+## How it is organised
+
+Small, single-purpose modules under [`src/`](src/), so each command stays easy to read and test:
+
+| Module | Responsibility |
+| --- | --- |
+| `csv` | parse a CSV file into an in-memory `Table`, and serialise it back |
+| `where` | the shared equality filter, reused by SELECT, UPDATE, and DELETE |
+| `select` | column projection |
+| `insert` / `update` / `delete` | the persisted write commands |
+| `strutil` | small string helpers (trim, upper-case, splitting) |
+
+The CSV layer handles the awkward parts of the format: quoted fields, commas inside a value, escaped
+quotes (`""`), and CRLF line endings. The serialiser re-quotes correctly on the way out, so saved
+files stay valid.
+
+## Tests and CI
+
+Six unit-test suites, one per module (`csv`, `select`, `where`, `insert`, `update`, `delete`), run in
+GitHub Actions on every push and pull request, followed by a scripted end-to-end demo that runs
+SELECT, INSERT, UPDATE, and DELETE against the sample data. See
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). A red check blocks the merge.
+
+Run a suite locally, for example:
+
+```bash
+g++ -std=c++20 -Wall -Wextra -o select_tests \
+  tests/test_select.cpp src/select.cpp src/where.cpp src/csv.cpp
+./select_tests
+```
+
+## Project structure
+
+```
+11402_CS351_ProjectB/
+├── src/        # csv, where, select, insert, update, delete, strutil + main (the CLI)
+├── tests/      # one test suite per module
+├── data/       # students.csv sample
+├── docs/       # per-feature design and test plans
+└── .github/    # GitHub Actions CI
+```
+
+## A note on the query syntax
+
+This is a deliberately small subset of SQL: one command per run, equality-only `WHERE`, and unquoted
+values in the examples. The goal is to show the engine and the workflow clearly, not to be a complete
+SQL implementation.
+
+---
+
+Levinson · ID 1123542 · CS351, Yuan Ze University
